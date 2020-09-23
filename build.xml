@@ -1,0 +1,53 @@
+<project name="19424008" default="dist">
+  <property name="dist" value="dist" />
+  <property name="serverMetaInf" value="SERVER-META-INF" />
+  <property name="clientMetaInf" value="CLIENT-META-INF" />
+  <property name="serverAppName" value="chat-server.jar" />
+  <property name="clientAppName" value="chat-widget.jar" />
+
+  <target name="dist" depends="clean">
+    <mkdir dir="${dist}" />
+
+    <copy todir="${dist}/db">
+      <fileset dir="db" />
+    </copy>
+
+    <copy todir="${dist}/library">
+      <fileset dir="library" />
+    </copy>
+
+    <copy todir="${dist}/resource">
+      <fileset dir="resource" />
+    </copy>
+
+    <copy todir="${dist}/upload">
+      <fileset dir="upload" />
+    </copy>
+
+    <mkdir dir="${serverMetaInf}" />
+    <manifest file="${serverMetaInf}/MANIFEST.MF">
+      <attribute name="Main-Class" value="main.ChatServer" />
+      <attribute name="Class-Path" value="library/jackson-annotations-2.11.1.jar library/jackson-core-2.11.1.jar library/jackson-databind-2.11.1.jar" />
+    </manifest>
+    <jar jarfile="${dist}/${serverAppName}" manifest="${serverMetaInf}/MANIFEST.MF" basedir="bin" />
+
+    <mkdir dir="${clientMetaInf}" />
+    <manifest file="${clientMetaInf}/MANIFEST.MF">
+      <attribute name="Main-Class" value="main.ChatWidget" />
+      <attribute name="Class-Path" value="library/jackson-annotations-2.11.1.jar library/jackson-core-2.11.1.jar library/jackson-databind-2.11.1.jar" />
+    </manifest>
+    <jar jarfile="${dist}/${clientAppName}" manifest="${clientMetaInf}/MANIFEST.MF" basedir="bin" />
+
+    <copy file="${dist}/${serverAppName}" todir="" />
+    <copy file="${dist}/${clientAppName}" todir="" />
+
+  </target>
+
+  <target name="clean">
+    <delete dir="${dist}" />
+    <delete dir="${serverMetaInf}" />
+    <delete dir="${clientMetaInf}" />
+    <delete file="${serverAppName}" />
+    <delete file="${clientAppName}" />
+  </target>
+</project>
