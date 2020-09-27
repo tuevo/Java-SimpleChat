@@ -3,6 +3,7 @@ package classes;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Vector;
+import java.nio.charset.Charset;
 
 public class WaitingClientThread extends Thread {
 	@Override

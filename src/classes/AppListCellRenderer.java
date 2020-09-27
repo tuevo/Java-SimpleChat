@@ -4,11 +4,13 @@ import java.awt.*;
 import java.awt.geom.Area;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.fasterxml.jackson.databind.*;
 import javax.swing.*;
 
 public class AppListCellRenderer implements ListCellRenderer<Message> {
@@ -33,10 +35,10 @@ public class AppListCellRenderer implements ListCellRenderer<Message> {
 			message.setBorder(BorderFactory.createMatteBorder(10, 10, 10, 10, list.getBackground()));
 
 			// avatar
-			BufferedImage bi = ImageIO.read(new File(sender.getAvatar().isEmpty()
-					? GlobalConstant.RESOURCE_AVATAR_DIR + "user.png"
-					: GlobalConstant.RESOURCE_AVATAR_DIR + sender.getAvatar()));
-			
+			BufferedImage bi = ImageIO
+					.read(new File(sender.getAvatar().isEmpty() ? GlobalConstant.RESOURCE_AVATAR_DIR + "user.png"
+							: GlobalConstant.RESOURCE_AVATAR_DIR + sender.getAvatar()));
+
 			Area clip = new Area(new Rectangle(0, 0, bi.getWidth(), bi.getHeight()));
 			Area oval = new Area(new Ellipse2D.Double(0, 0, bi.getWidth() - 1, bi.getHeight() - 1));
 			clip.subtract(oval);
@@ -71,22 +73,37 @@ public class AppListCellRenderer implements ListCellRenderer<Message> {
 
 				if (value.getType() == Message.FILE) {
 					html2 = "px; padding: 10px 10px 10px 10px; text-decoration: underline; cursor: pointer'>";
+
+					try {
+						ClientFile receivedFile = mapper.readValue(s, ClientFile.class);
+						messageText = new JLabel(html1 + "200" + html2 + receivedFile.getName());
+					} catch (JsonMappingException e) {
+						System.err.println("AppListCellRenderer: parse received file failed " + e.getMessage());
+					}
+
 					messageText.setForeground(Color.BLUE);
 				}
-				
+
 				messageText.setVerticalAlignment(SwingConstants.TOP);
-				messageText.setFont(new Font(messageText.getFont().getName(), Font.PLAIN, 12));
+				messageText.setFont(new Font(messageText.getFont().getName(), Font.PLAIN, 14));
 				messageContent.add(messageText, BorderLayout.CENTER);
 			} else {
-				BufferedImage receivedImageBuf = ImageIO.read(new File(GlobalConstant.UPLOAD_DIR + value.getContent()));
-				int width = receivedImageBuf.getWidth(), height = receivedImageBuf.getHeight();
-				Image receivedImage = receivedImageBuf.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-				JLabel uploadedImageLabel = new JLabel(new ImageIcon(receivedImage));
-				messageContent.add(uploadedImageLabel, BorderLayout.CENTER);
+				try {
+					ClientFile receivedFile = mapper.readValue(s, ClientFile.class);
+					BufferedImage receivedImageBuf = ImageIO.read(new ByteArrayInputStream(receivedFile.getData()));
+					
+					int width = receivedImageBuf.getWidth(), height = receivedImageBuf.getHeight();
+					Image receivedImage = receivedImageBuf.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+					JLabel uploadedImageLabel = new JLabel(new ImageIcon(receivedImage));
+					messageContent.add(uploadedImageLabel, BorderLayout.CENTER);
 
-				// re-customize padding of sender name
-				senderName = new JLabel(
-						"<html><p style='padding: 10px 10px 20px 10px'>" + sender.getName() + "</span></html>");
+					// re-customize padding of sender name
+					senderName = new JLabel(
+							"<html><p style='padding: 10px 10px 20px 10px'>" + sender.getName() + "</span></html>");
+					
+				} catch (JsonMappingException e) {
+					System.err.println("AppListCellRenderer: parse received file failed " + e.getMessage());
+				}
 			}
 
 			if (sender.getId().equals(this.currentMember.getId())) {

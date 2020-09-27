@@ -1,7 +1,7 @@
 package classes;
 import java.io.*;
 import java.text.SimpleDateFormat;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.*;
 
 public class SendingThread extends Thread {
 	private BufferedWriter bw;
@@ -22,7 +22,7 @@ public class SendingThread extends Thread {
 			bw.newLine();
 			bw.flush();
 		} catch (Exception e) {
-			System.err.println("SendingThread: " + e.getStackTrace());
+			//System.err.println("SendingThread: " + e.getStackTrace());
 		}
 	}	
 }

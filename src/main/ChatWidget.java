@@ -9,9 +9,8 @@ import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
@@ -19,6 +18,7 @@ import javax.swing.event.ListSelectionListener;
 
 import java.io.*;
 import classes.*;
+import java.nio.charset.Charset;
 
 public class ChatWidget {
 	private static JFrame welcomeFrame;
@@ -73,7 +73,7 @@ public class ChatWidget {
 										}
 									} catch (JsonMappingException e) {
 										System.err.println(
-												"RecevingMemberListThread: cannot parse json to member object");
+												"ReceivingMemberListThread: cannot parse json to member object");
 									}
 								}
 
@@ -84,7 +84,7 @@ public class ChatWidget {
 									sidebarHeaderTitle.setVisible(true);
 
 							} catch (JsonMappingException e) {
-								System.err.println("RecevingMemberListThread: cannot parse jsonMembers");
+								System.err.println("ReceivingMemberListThread: cannot parse jsonMembers");
 							}
 						}
 
@@ -235,25 +235,67 @@ public class ChatWidget {
 				if (messageList.getSelectedValue() != null) {
 					Message selectedMessage = messageList.getSelectedValue();
 
-					if (selectedMessage.getType() == Message.FILE) {
-						Thread openFileThread = new Thread() {
-							public void run() {
-								if (Desktop.isDesktopSupported()) {
-									try {
-										Desktop.getDesktop().open(
-												new File(GlobalConstant.UPLOAD_DIR + selectedMessage.getContent()));
-									} catch (IOException e1) {
-										// TODO Auto-generated catch block
-										System.out.println(
-												"ChatWidget::select message list item: file could not be found");
-									}
+					if (selectedMessage.getType() == Message.FILE || selectedMessage.getType() == Message.IMAGE) {
+						try {
+							ClientFile receivedFile = mapper.readValue(selectedMessage.getContent(), ClientFile.class);
+							try {
+								Member sender = mapper.readValue(selectedMessage.getJsonSender(), Member.class);
+
+								if (sender.getId().equals(currentMember.getId())) {
+									Thread openFileThread = new Thread() {
+										@Override
+										public void run() {
+											if (Desktop.isDesktopSupported()) {
+												try {
+													Desktop.getDesktop().open(new File(
+															GlobalConstant.UPLOAD_DIR + receivedFile.getName()));
+												} catch (IOException e1) {
+													System.out.println(
+															"ChatWidget::select message list item: file could not be found");
+												}
+											} else {
+												System.out.println(
+														"ChatWidget::select message list item: desktop does not support");
+											}
+										}
+									};
+									openFileThread.start();
+
 								} else {
-									System.out
-											.println("ChatWidget::select message list item: desktop does not support");
+									Thread downloadFileThread = new Thread() {
+										@Override
+										public void run() {
+											try {
+												FileOutputStream fout = new FileOutputStream(
+														new File(GlobalConstant.DOWNLOAD_DIR + receivedFile.getName()));
+												fout.write(receivedFile.getData());
+												fout.close();
+
+												JOptionPane.showMessageDialog(widgetFrame,
+														"Saved " + receivedFile.getName() + " to download folder!");
+
+											} catch (FileNotFoundException e) {
+												System.err.println(
+														"ChatWidget::initWidgetFrame: cannot create file to save "
+																+ e.getMessage());
+											} catch (IOException e) {
+												System.err.println(
+														"ChatWidget::initWidgetFrame: cannot close file to save "
+																+ e.getMessage());
+											}
+										}
+									};
+									downloadFileThread.start();
 								}
+
+							} catch (JsonProcessingException e1) {
+								System.err.println(
+										"ChatWidget::initWidgetFrame: cannot parse jsonSender " + e1.getMessage());
 							}
-						};
-						openFileThread.start();
+						} catch (JsonProcessingException e1) {
+							System.err.println(
+									"ChatWidget::initWidgetFrame: parse received file failed " + e1.getMessage());
+						}
 
 						// keep receiving message from server
 						receiveMessage(messageListDataSource, messageList, messageListScrollPane, memberListDataSource,
@@ -302,30 +344,43 @@ public class ChatWidget {
 						File file = fileChooser.getSelectedFile();
 
 						try {
-							// save file to upload folder
 							String fileName = file.getName();
 							String fileType = fileName.substring(fileName.lastIndexOf("."), fileName.length());
-							FileInputStream fin = new FileInputStream(file);
-							FileOutputStream fout = new FileOutputStream(
-									new File(GlobalConstant.UPLOAD_DIR + fileName));
+							long fileSize = file.length();
 
-							int i = 0;
-							while ((i = fin.read()) != -1) {
-								fout.write((char) i);
+							if (fileSize > 1024 * 1024) {
+								JOptionPane.showMessageDialog(widgetFrame,
+										"Allowed file size must be less than or equal 1MB");
+								return;
 							}
 
-							fin.close();
-							fout.close();
-
-							// send uploaded file name to server
 							int messageType = Message.FILE;
 							if (fileType.equals(".png") || fileType.equals(".jpg") || fileType.equals(".jpeg")
 									|| fileType.equals(".gif") || fileType.equals(".ico") || fileType.equals(".svg")) {
 								messageType = Message.IMAGE;
 							}
 
+							// save file to upload folder
+							FileInputStream fin = new FileInputStream(file);
+							FileOutputStream fout = new FileOutputStream(
+									new File(GlobalConstant.UPLOAD_DIR + fileName));
+
+							int i = 0;
+							byte[] data = new byte[(int) fileSize];
+
+							while ((i = fin.read(data)) != -1) {
+								fout.write(data, 0, i);
+							}
+
+							fin.close();
+							fout.close();
+
+							// send file to server
+							ClientFile sentFile = new ClientFile(fileName, fileSize, data);
+							String jsonSentFile = mapper.writeValueAsString(sentFile);
+
 							String jsonSender = mapper.writeValueAsString(currentMember);
-							Message message = new Message(jsonSender, fileName, new Date(), messageType);
+							Message message = new Message(jsonSender, jsonSentFile, new Date(), messageType);
 							sendMessage(message);
 
 						} catch (Exception ex) {
@@ -348,6 +403,7 @@ public class ChatWidget {
 		messageInput.setLineWrap(true);
 		messageInput.setBorder(BorderFactory.createEmptyBorder(20, 10, 0, 10));
 		messageInput.setBackground(Color.WHITE);
+		messageInput.setFont(new Font(messageInput.getFont().getName(), Font.PLAIN, 14));
 		widgetFooter.add(messageInput, BorderLayout.CENTER);
 
 		messageInput.addKeyListener(new KeyListener() {
@@ -378,6 +434,60 @@ public class ChatWidget {
 			public void keyPressed(KeyEvent e) {
 			}
 		});
+
+		// choose emoji box
+		String[] emojis = new String[] { "😀", "😍", "😔", "😘", "😠", "😜", "😪", "😑", "😎", "😌", "😵", "🙃", "😣",
+				"😔", "😢" };
+		JFrame emojiBox = new JFrame("Emoji");
+		emojiBox.setLayout(new FlowLayout(FlowLayout.LEFT));
+		emojiBox.setSize(305, 160);
+		emojiBox.setLocationRelativeTo(null);
+
+		for (String e : emojis) {
+			JButton emojiButton = new JButton(e);
+			emojiButton.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 20));
+			emojiButton.setBackground(Color.WHITE);
+			emojiButton.setBorderPainted(false);
+			emojiButton.setFocusPainted(false);
+			emojiBox.add(emojiButton);
+
+			emojiButton.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					String emoji = emojiButton.getText();
+					int pos = messageInput.getCaretPosition();
+					String oldText = messageInput.getText();
+					String newText = pos < oldText.length()
+							? oldText.substring(0, pos) + emoji + oldText.substring(pos, oldText.length())
+							: oldText + emoji;
+					messageInput.setText(newText);
+					messageInput.setCaretPosition(pos + 2);
+				}
+			});
+		}
+
+		// open choose emoji box button
+		try {
+			BufferedImage chooseEmojiIconBuf = ImageIO.read(new File(GlobalConstant.RESOURCE_ICON_DIR + "smile.png"));
+			Image chooseEmojiIcon = chooseEmojiIconBuf.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
+			JButton chooseEmojiButton = new JButton();
+			chooseEmojiButton.setPreferredSize(new Dimension(50, 25));
+			chooseEmojiButton.setIcon(new ImageIcon(chooseEmojiIcon));
+			chooseEmojiButton.setToolTipText("Select emoji");
+			chooseEmojiButton.setBackground(null);
+			chooseEmojiButton.setBorder(BorderFactory.createEmptyBorder());
+			widgetToolbar.add(chooseEmojiButton);
+
+			chooseEmojiButton.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					emojiBox.setVisible(true);
+				}
+			});
+
+		} catch (Exception e) {
+			System.err.println("ChatWidget::initWidgetGUI: Cannot load image");
+		}
 
 		// Send button
 		JButton sendButton = new JButton("SEND");
@@ -411,8 +521,8 @@ public class ChatWidget {
 		try {
 			// Connect to chat server
 			Socket socket = new Socket("localhost", 3200);
-			br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+			br = new BufferedReader(new InputStreamReader(socket.getInputStream(), Charset.forName( "UTF-8" )));
+			bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), Charset.forName( "UTF-8" )));
 
 			// Start receiving message from server
 			receiveMessage(messageListDataSource, messageList, messageListScrollPane, memberListDataSource, memberList,
@@ -453,7 +563,7 @@ public class ChatWidget {
 
 		JPanel avatarContainer = new JPanel();
 		avatarContainer.setLayout(new GridBagLayout());
-		
+
 		JLabel avatarLabel = new JLabel();
 		avatarContainer.add(avatarLabel);
 
@@ -498,7 +608,7 @@ public class ChatWidget {
 		avatarInput.setPreferredSize(new Dimension(135, 25));
 		avatarInput.setEditable(false);
 		inputAvatarPane.add(avatarInput);
-		
+
 		// hide avatar url label
 		JLabel avatarNameLabel = new JLabel();
 
@@ -540,7 +650,7 @@ public class ChatWidget {
 						String avatarName = memberId + fileType;
 						String avatarPath = GlobalConstant.RESOURCE_AVATAR_DIR + avatarName;
 						avatarNameLabel.setText(avatarName);
-						
+
 						FileInputStream fin = new FileInputStream(file);
 						FileOutputStream fout = new FileOutputStream(new File(avatarPath));
 						int i = 0;
@@ -561,7 +671,7 @@ public class ChatWidget {
 						g2d.fillRect(0, 0, bi.getWidth(), bi.getHeight());
 						Image avatar = bi.getScaledInstance(70, 70, Image.SCALE_SMOOTH);
 						avatarLabel.setIcon(new ImageIcon(avatar));
-						
+
 					} catch (Exception ex) {
 						System.out.println("problem accessing file: " + file.getAbsolutePath());
 					}
@@ -654,10 +764,10 @@ public class ChatWidget {
 		form.setAlignmentY(JPanel.CENTER_ALIGNMENT);
 		form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
 		loginFrame.add(form);
-		
+
 		JPanel avatarContainer = new JPanel();
 		avatarContainer.setLayout(new GridBagLayout());
-		
+
 		JLabel avatarLabel = new JLabel();
 		avatarContainer.add(avatarLabel);
 

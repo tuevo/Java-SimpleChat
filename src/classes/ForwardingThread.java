@@ -4,9 +4,9 @@ import java.io.*;
 import java.util.*;
 import java.net.*;
 import java.text.SimpleDateFormat;
+import java.nio.charset.Charset;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.*;
 
 public class ForwardingThread extends Thread {
 	private Socket fromClient;
@@ -21,7 +21,7 @@ public class ForwardingThread extends Thread {
 	@Override
 	public void run() {
 		try {
-			BufferedReader br = new BufferedReader(new InputStreamReader(this.fromClient.getInputStream()));
+			BufferedReader br = new BufferedReader(new InputStreamReader(this.fromClient.getInputStream(),Charset.forName( "UTF-8" )));
 			String jsonReceivedMessage = br.readLine();
 			ObjectMapper mapper = new ObjectMapper();
 			mapper.setDateFormat(new SimpleDateFormat("HH:mm"));
@@ -33,7 +33,7 @@ public class ForwardingThread extends Thread {
 				// send the message to all clients
 				for(Socket client : ForwardingThread.clients) {
 					if(receivedMessage.getType() != Message.ONLINE && receivedMessage.getType() != Message.OFFLINE) {
-						BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(client.getOutputStream()));	
+						BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(client.getOutputStream(),Charset.forName( "UTF-8" )));	
 						SendingThread st = new SendingThread(bw, receivedMessage);
 						st.start();
 					} else {
@@ -57,8 +57,9 @@ public class ForwardingThread extends Thread {
 								Member sender = mapper.readValue(receivedMessage.getJsonSender(), Member.class);
 					
 								for(int i = 0; i < ForwardingThread.onlineMembers.size(); i++)
-									if(ForwardingThread.onlineMembers.get(i).getId().equals(sender.getId()))
+									if(ForwardingThread.onlineMembers.get(i).getId().equals(sender.getId())) {
 										ForwardingThread.onlineMembers.remove(i);
+									}
 																
 							} catch(JsonMappingException e) {
 								System.err.println("ForwardingThread::run:offline: cannot parse jsonSender");

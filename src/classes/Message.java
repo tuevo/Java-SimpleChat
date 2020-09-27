@@ -3,8 +3,7 @@ package classes;
 import java.io.IOException;
 import java.util.*;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.*;
 
 public class Message {
 	public static final int SYSTEM = 0;
@@ -55,7 +54,17 @@ public class Message {
 				
 				if(this.type != Message.ONLINE && this.type != Message.OFFLINE) {
 					System.out.println("\nfrom " + sender.getName() + " at " + helper.parseDateToString(this.date, "HH:mm"));
-					System.out.println(this.content);
+					
+					if(this.type == Message.FILE || this.type == Message.IMAGE) {
+						try {
+							ClientFile file = mapper.readValue(this.content, ClientFile.class);
+							System.out.println(file.getName() + "(" + file.getSize() + " bytes)");
+						} catch(JsonMappingException e) {
+							System.err.println("Message::print: cannot parse client file");
+						}
+					} else {
+						System.out.println(this.content);
+					}
 				} else {
 					System.out.print(sender.getName());
 					
