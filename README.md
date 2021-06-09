@@ -99,7 +99,7 @@
 ## 5. File Structure
 
 ```
-19424008_ChatApp
+Java-SimpleChat
 |__ src
     |__ main
     |__ classes
